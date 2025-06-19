@@ -190,23 +190,23 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
      * @return string|boolean
      */
     public function getBlackCatridgeType()
-    {
-        if ($this->isColorPrinter()) {
-            return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
-        } elseif ($this->isMonoPrinter()) {
-            $hex_to_bin = $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
-            $cleared_hex = preg_replace('/[^a-fA-F0-9]/', '', $hex_to_bin);
-            return hex2bin($cleared_hex);
-            //return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
-        } else {
-            return false;
-        }
+{
+    // Se for impressora colorida
+    if ($this->isColorPrinter()) {
+        return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
 
+    // Senão, se for impressora monocromática
+    } elseif ($this->isMonoPrinter()) {
+        $hex_to_bin = $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
+        $cleared_hex = preg_replace('/[^a-fA-F0-9]/', '', $hex_to_bin);
         return hex2bin($cleared_hex);
+
+    // Caso não seja nenhuma das duas
     } else {
         return false;
     }
 }
+
 
     /**
      * Function gets description about cyan catridge of the printer,
