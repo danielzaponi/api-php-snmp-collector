@@ -195,7 +195,7 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
             return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
         } elseif ($this->isMonoPrinter()) {
             $hex_to_bin = $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
-            $cleared_hex = str_replace(["Hex-","\n00"," "],"",$hex_to_bin);
+            $cleared_hex = preg_replace('/[^a-fA-F0-9]/', '', $hex_to_bin);
             return hex2bin($cleared_hex);
             //return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
         } else {
