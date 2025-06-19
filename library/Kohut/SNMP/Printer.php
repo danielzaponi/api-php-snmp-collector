@@ -74,9 +74,85 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
     const SNMP_CARTRIDGE_COLOR_SLOT_3                 = '.1.3.6.1.2.1.43.12.1.1.4.1.3';
     const SNMP_CARTRIDGE_COLOR_SLOT_4                 = '.1.3.6.1.2.1.43.12.1.1.4.1.4';
 
-    public function reorganizeHex(){
+    /**
+     * Detecta, sanitiza e converte uma string hexadecimal de forma segura.
+     *
+     * @param string $input
+     * @return string Retorna a string convertida ou original, se não for hexadecimal
+     */
+    private function safeHexDecode($input)
+    {
+        // Verifica se começa com "Hex-" ou contém muitos espaços/hexadecimais
+        $looksLikeHex = stripos($input, 'Hex-') === 0 || preg_match('/([A-Fa-f0-9]{2} ?){4,}/', $input);
 
+        if (!$looksLikeHex) {
+            return trim($input); // Já é uma string legível
+        }
+
+        // Remove prefixo Hex- e caracteres não-hex
+        $clean = preg_replace('/[^a-fA-F0-9]/', '', preg_replace('/^Hex-/', '', $input));
+
+        // Corrige se tiver número ímpar de caracteres
+        if (strlen($clean) % 2 !== 0) {
+            $clean = '0' . $clean;
+        }
+
+        $decoded = hex2bin($clean);
+
+        // Remove bytes de controle invisíveis
+        return $decoded !== false ? trim($decoded, "\x00..\x1F") : trim($input);
     }
+
+    /**
+     * Verifica se uma string tem características de dado hexadecimal.
+     *
+     * @param string $input
+     * @return bool
+     */
+    private function isHexadecimal($input)
+    {
+        $trimmed = trim($input);
+
+        // Ignora strings muito curtas
+        if (strlen($trimmed) < 4) {
+            return false;
+        }
+
+        // Detecta prefixo "Hex-" ou muitos pares hexadecimais
+        return stripos($trimmed, 'Hex-') === 0 ||
+            preg_match('/^([a-fA-F0-9]{2}[\s\r\n]*){3,}$/', $trimmed);
+    }
+
+    /**
+     * Converte uma string hexadecimal limpa em ASCII, removendo bytes invisíveis.
+     *
+     * @param string $input
+     * @return string
+     */
+    private function sanitizeHex($input)
+    {
+        // Remove prefixo e caracteres não-hexadecimais
+        $clean = preg_replace('/[^a-fA-F0-9]/', '', preg_replace('/^Hex-/', '', $input));
+
+        // Corrige se tiver número ímpar de caracteres
+        if (strlen($clean) % 2 !== 0) {
+            $clean = '0' . $clean;
+        }
+
+        $decoded = hex2bin($clean);
+
+        // Se falhar, retorna original
+        if ($decoded === false) {
+            return trim($input);
+        }
+
+        // Remove caracteres de controle (ex: \x00, \x0e, etc.)
+        return trim($decoded, "\x00..\x1F");
+    }
+
+
+
+
 
     /**
      * Function gets and return what type of printer we are working with,
@@ -190,22 +266,40 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
      * @return string|boolean
      */
     public function getBlackCatridgeType()
-{
-    // Se for impressora colorida
-    if ($this->isColorPrinter()) {
-        return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
+    {
+        if ($this->isColorPrinter()) {
+            return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
+        } elseif ($this->isMonoPrinter()) {
+            $raw = $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
 
-    // Senão, se for impressora monocromática
-    } elseif ($this->isMonoPrinter()) {
-        $hex_to_bin = $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
-        $cleared_hex = preg_replace('/[^a-fA-F0-9]/', '', $hex_to_bin);
-        return hex2bin($cleared_hex);
+            if ($this->isHexadecimal($raw)) {
+                return $this->sanitizeHex($raw);
+            }
 
-    // Caso não seja nenhuma das duas
-    } else {
-        return false;
+            return trim($raw); // retorno direto se não for hexadecimal
+
+        } else {
+            return false;
+        }
     }
-}
+
+    /**
+     * Function gets description about black catridge of the printer,
+     * or returns false if call failed
+     *
+     * @return string|boolean
+     */
+    /*public function getBlackCatridgeType()
+    {
+        if ($this->isColorPrinter()) {
+            return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
+        } elseif ($this->isMonoPrinter()) {
+            return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
+        } else {
+            return false;
+        }
+    }*/
+
 
 
     /**
@@ -268,8 +362,8 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
      */
     protected function getSubUnitPercentageLevel($maxValueSNMPSlot, $actualValueSNMPSlot)
     {
-        $max = str_replace("INTEGER: ","",$this->get($maxValueSNMPSlot));
-        $actual = str_replace("INTEGER: ","",$this->get($actualValueSNMPSlot));
+        $max = str_replace("INTEGER: ", "", $this->get($maxValueSNMPSlot));
+        $actual = str_replace("INTEGER: ", "", $this->get($actualValueSNMPSlot));
 
         if ($max === false || $actual === false) {
             return false;
@@ -409,7 +503,10 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
 
         for ($i = 0; $i < sizeOf($names); $i++) {
             $resultData[] = array(
-                'name'            => str_replace('"', '', $names[$i]), 'maxValue'        => $maxValues[$i], 'actualValue'     => $actualValues[$i], 'percentageLevel' => ((int)$actualValues[$i] >= 0) ? ($actualValues[$i] / ($maxValues[$i] / 100)) : null
+                'name'            => str_replace('"', '', $names[$i]),
+                'maxValue'        => $maxValues[$i],
+                'actualValue'     => $actualValues[$i],
+                'percentageLevel' => ((int)$actualValues[$i] >= 0) ? ($actualValues[$i] / ($maxValues[$i] / 100)) : null
             );
         }
         return $resultData;
@@ -420,23 +517,24 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
      * 
      * @return array
      */
-    public function getAllInfo(){
+    public function getAllInfo()
+    {
         return [
             'current_time' => date('d/m/Y H:i:s'),
-            'is_color_printer' => $this->isColorPrinter()?'color printer':'mono printer',
-                'factory_name' => $this->getFactoryId(),
-                'vendor' => $this->getVendorName(),
-                'serial_number' => $this->getSerialNumber(),
-                'black_toner' => $this->getBlackTonerLevel(),
-                'cyan_toner'   => $this->getCyanTonerLevel(),
-                'magenta_toner' => $this->getMagentaTonerLevel(),
-                'yellow_toner' => $this->getYellowTonerLevel(),
-                'drum_level' => $this->getDrumLevel(),
-                'printed_papers' => $this->getNumberOfPrintedPapers(),
-                'black_catridge_type' => $this->getBlackCatridgeType(),
-                'cyan_catridge_type' => $this->getCyanCatridgeType(),
-                'magenta_catridge_type' => $this->getMagentaCatridgeType(),
-                'yellow_catridge_type' => $this->getYellowCatridgeType()
+            'is_color_printer' => $this->isColorPrinter() ? 'color printer' : 'mono printer',
+            'factory_name' => $this->getFactoryId(),
+            'vendor' => $this->getVendorName(),
+            'serial_number' => $this->getSerialNumber(),
+            'black_toner' => $this->getBlackTonerLevel(),
+            'cyan_toner'   => $this->getCyanTonerLevel(),
+            'magenta_toner' => $this->getMagentaTonerLevel(),
+            'yellow_toner' => $this->getYellowTonerLevel(),
+            'drum_level' => $this->getDrumLevel(),
+            'printed_papers' => $this->getNumberOfPrintedPapers(),
+            'black_catridge_type' => $this->getBlackCatridgeType(),
+            'cyan_catridge_type' => $this->getCyanCatridgeType(),
+            'magenta_catridge_type' => $this->getMagentaCatridgeType(),
+            'yellow_catridge_type' => $this->getYellowCatridgeType()
         ];
     }
 }
