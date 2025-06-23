@@ -283,23 +283,6 @@ class Kohut_SNMP_Printer extends Kohut_SNMP_Abstract
         }
     }
 
-    /**
-     * Function gets description about black catridge of the printer,
-     * or returns false if call failed
-     *
-     * @return string|boolean
-     */
-    /*public function getBlackCatridgeType()
-    {
-        if ($this->isColorPrinter()) {
-            return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_4);
-        } elseif ($this->isMonoPrinter()) {
-            return $this->getSNMPString(self::SNMP_SUB_UNIT_TYPE_SLOT_1);
-        } else {
-            return false;
-        }
-    }*/
-
 
 
     /**
